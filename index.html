@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Price Analyzer - Анализ цен товаров</title>
+    <title>AI Price Analyzer - Поиск по всему интернету</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -11,10 +11,11 @@
     <div class="container">
         <!-- Заголовок -->
         <header class="header">
-            <h1>🤖 AI Price Analyzer</h1>
-            <p>Реальный анализ цен товаров через GPT API</p>
+            <h1>🌐 AI Price Analyzer</h1>
+            <p>Реальный анализ цен товаров через GPT + SerpAPI - поиск по всему интернету</p>
             <div class="status-panel">
-                <span id="apiStatus" class="status error">API не настроен</span>
+                <span id="apiStatus" class="status error">OpenAI не настроен</span>
+                <span id="serpApiStatus" class="status warning">SerpAPI не настроен</span>
                 <span id="productCount" class="status info">Товаров: 0</span>
                 <button id="voiceToggle" class="btn voice-btn">🎤 Голос</button>
             </div>
@@ -50,8 +51,8 @@
                 <input type="text" id="searchProducts" placeholder="🔍 Поиск товаров..." class="search-input">
                 <div class="bulk-actions">
                     <button id="selectAll" class="btn outline">☑️ Выбрать все</button>
-                    <button id="bulkCompetitorSearch" class="btn secondary" disabled>🔍 Найти цены конкурентов</button>
-                    <button id="bulkAvitoSearch" class="btn secondary" disabled>🛒 Найти б/у на Avito</button>
+                    <button id="bulkCompetitorSearch" class="btn secondary" disabled>🌐 Поиск по интернету</button>
+                    <button id="bulkAvitoSearch" class="btn secondary" disabled>🛒 Поиск на Avito</button>
                 </div>
             </div>
 
@@ -90,21 +91,27 @@
         <div id="dialog" class="tab-content">
             <div class="dialog-container">
                 <div class="dialog-header">
-                    <h3>🤖 AI Агент для анализа цен</h3>
+                    <h3>🌐 AI Агент с поиском по всему интернету</h3>
                     <div class="voice-status" id="voiceStatus">Голосовые команды отключены</div>
                 </div>
 
                 <div class="dialog-messages" id="dialogMessages">
                     <div class="message system">
                         <div class="message-content">
-                            <strong>Система готова к работе!</strong><br>
-                            Доступные команды:
+                            <strong>🌐 Система с SerpAPI готова к работе!</strong><br>
+                            <strong>Поиск по всему интернету без ограничений</strong><br><br>
+                            
+                            <strong>Доступные команды:</strong>
                             <ul>
-                                <li>"найди цену на [товар] у конкурентов"</li>
-                                <li>"найди б/у цену на [товар]"</li>
-                                <li>"измени количество [товар] на [число]"</li>
-                                <li>"установи цену продажи [товар] [цена]"</li>
+                                <li><strong>"найди цену на [товар] у конкурентов"</strong> - поиск по всем сайтам в интернете</li>
+                                <li><strong>"найди б/у цену на [товар]"</strong> - поиск на Avito.ru</li>
+                                <li><strong>"измени количество [товар] на [число]"</strong></li>
+                                <li><strong>"установи цену продажи [товар] [цена]"</strong></li>
                             </ul>
+                            
+                            <div class="serpapi-status">
+                                <span id="serpStatusInChat">🟡 Настройте SerpAPI для полноценного поиска</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -125,7 +132,7 @@
         <div id="history" class="tab-content">
             <div class="history-container">
                 <div class="history-header">
-                    <h3>📋 История поиска цен</h3>
+                    <h3>📋 История поиска цен через SerpAPI</h3>
                     <div class="history-controls">
                         <select id="historyFilter">
                             <option value="all">Все поиски</option>
@@ -137,7 +144,9 @@
                     </div>
                 </div>
                 <div id="historyList" class="history-list">
-                    <!-- История будет загружаться динамически -->
+                    <div class="empty-state">
+                        <p>История поиска пуста. Выполните поиск цен для сохранения результатов.</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -151,7 +160,7 @@
                 <div class="settings-group">
                     <h4>🔑 OpenAI API</h4>
                     <div class="form-group">
-                        <label for="apiKey">API Ключ *</label>
+                        <label for="apiKey">OpenAI API Ключ *</label>
                         <input type="password" id="apiKey" placeholder="sk-proj-..." required>
                         <small>Получите ключ на <a href="https://platform.openai.com" target="_blank">platform.openai.com</a></small>
                     </div>
@@ -165,8 +174,42 @@
                         </select>
                     </div>
                     <div class="form-actions">
-                        <button id="testConnection" class="btn outline">🧪 Тест подключения</button>
-                        <button id="saveApiSettings" class="btn primary">💾 Сохранить</button>
+                        <button id="testConnection" class="btn outline">🧪 Тест OpenAI</button>
+                    </div>
+                </div>
+
+                <!-- SerpAPI настройки -->
+                <div class="settings-group serpapi-section">
+                    <h4>🌐 SerpAPI - Поиск по всему интернету</h4>
+                    <div class="serpapi-info">
+                        <p><strong>Для реального поиска цен по всему интернету</strong></p>
+                        <p>Без SerpAPI система работает в ограниченном режиме</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="serpApiKey">SerpAPI Ключ</label>
+                        <input type="password" id="serpApiKey" placeholder="Вставьте ваш SerpAPI ключ">
+                        <small>
+                            Получите бесплатный ключ на 
+                            <a href="https://serpapi.com" target="_blank">serpapi.com</a>
+                            (100 бесплатных запросов в месяц)
+                        </small>
+                    </div>
+                    
+                    <div class="serpapi-features">
+                        <h5>Возможности с SerpAPI:</h5>
+                        <ul>
+                            <li>✅ Поиск по всем сайтам в интернете</li>
+                            <li>✅ Актуальные цены из любых магазинов</li>
+                            <li>✅ Поиск на Avito по всей России</li>
+                            <li>✅ Реальные ссылки на товары</li>
+                            <li>✅ Никаких ограничений по площадкам</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="testSerpApi" class="btn outline">🧪 Тест SerpAPI</button>
+                        <button id="saveApiSettings" class="btn primary">💾 Сохранить настройки</button>
                     </div>
                 </div>
 
@@ -176,12 +219,12 @@
                     
                     <div class="form-group">
                         <label for="competitorPrompt">Промпт для поиска цен конкурентов</label>
-                        <textarea id="competitorPrompt" rows="4" placeholder="Промпт для поиска цен у конкурентов..."></textarea>
+                        <textarea id="competitorPrompt" rows="4" placeholder="Промпт для анализа результатов SerpAPI..."></textarea>
                     </div>
                     
                     <div class="form-group">
                         <label for="avitoPrompt">Промпт для поиска на Avito</label>
-                        <textarea id="avitoPrompt" rows="4" placeholder="Промпт для поиска б/у товаров на Avito..."></textarea>
+                        <textarea id="avitoPrompt" rows="4" placeholder="Промпт для анализа объявлений Avito..."></textarea>
                     </div>
                     
                     <div class="form-group">
@@ -191,15 +234,6 @@
                     
                     <button id="resetPrompts" class="btn outline">🔄 Сбросить к умолчанию</button>
                     <button id="savePrompts" class="btn primary">💾 Сохранить промпты</button>
-                </div>
-
-                <!-- Управление колонками таблицы -->
-                <div class="settings-group">
-                    <h4>📊 Управление колонками таблицы</h4>
-                    <div id="columnsList" class="columns-list">
-                        <!-- Список колонок будет загружаться динамически -->
-                    </div>
-                    <button id="addColumn" class="btn outline">➕ Добавить колонку</button>
                 </div>
             </div>
         </div>
@@ -222,7 +256,9 @@
                     </div>
                 </div>
                 <div id="logsList" class="logs-list">
-                    <!-- Логи будут загружаться динамически -->
+                    <div class="empty-state">
+                        <p>Логи системы появятся здесь после выполнения операций</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -263,41 +299,10 @@
         </div>
     </div>
 
-    <div id="columnModal" class="modal">
-        <div class="modal-content">
-            <h3>Добавить колонку</h3>
-            <form id="columnForm">
-                <div class="form-group">
-                    <label for="columnName">Название колонки *</label>
-                    <input type="text" id="columnName" required>
-                </div>
-                <div class="form-group">
-                    <label for="columnType">Тип данных</label>
-                    <select id="columnType">
-                        <option value="text">Текст</option>
-                        <option value="number">Число</option>
-                        <option value="currency">Валюта</option>
-                        <option value="date">Дата</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="columnEditable" checked>
-                        Редактируемая пользователем
-                    </label>
-                </div>
-                <div class="modal-actions">
-                    <button type="submit" class="btn primary">Добавить</button>
-                    <button type="button" id="cancelColumn" class="btn outline">Отмена</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <!-- Индикатор загрузки -->
     <div id="loadingIndicator" class="loading-indicator">
         <div class="spinner"></div>
-        <div class="loading-text">Обработка запроса...</div>
+        <div class="loading-text">Выполняется поиск в интернете через SerpAPI...</div>
     </div>
 
     <!-- Уведомления -->
