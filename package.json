@@ -1,0 +1,47 @@
+{
+  "name": "ai-price-analyzer",
+  "version": "1.0.0",
+  "description": "AI Price Analyzer - Реальная система анализа цен товаров через GPT API без симуляций и демо данных",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Build completed'",
+    "start": "echo 'Static files ready'",
+    "deploy": "vercel --prod"
+  },
+  "keywords": [
+    "ai",
+    "price-analyzer",
+    "gpt-api",
+    "inventory",
+    "competitor-analysis",
+    "avito",
+    "excel",
+    "csv",
+    "voice-commands"
+  ],
+  "author": "AI Price Analyzer System",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/ai-price-analyzer.git"
+  },
+  "homepage": "https://ai-price-analyzer.vercel.app",
+  "bugs": {
+    "url": "https://github.com/your-username/ai-price-analyzer/issues"
+  },
+  "vercel": {
+    "functions": {
+      "api/openai.js": {
+        "maxDuration": 30
+      }
+    }
+  }
+}

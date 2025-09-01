@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Price Analyzer - Анализ цен товаров</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Заголовок -->
+        <header class="header">
+            <h1>🤖 AI Price Analyzer</h1>
+            <p>Реальный анализ цен товаров через GPT API</p>
+            <div class="status-panel">
+                <span id="apiStatus" class="status error">API не настроен</span>
+                <span id="productCount" class="status info">Товаров: 0</span>
+                <button id="voiceToggle" class="btn voice-btn">🎤 Голос</button>
+            </div>
+        </header>
+
+        <!-- Навигация -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="products">📊 Товары</button>
+            <button class="nav-tab" data-tab="dialog">🤖 AI Диалог</button>
+            <button class="nav-tab" data-tab="history">📋 История поиска</button>
+            <button class="nav-tab" data-tab="settings">⚙️ Настройки</button>
+            <button class="nav-tab" data-tab="logs">🔍 Логи</button>
+        </nav>
+
+        <!-- Вкладка: Товары -->
+        <div id="products" class="tab-content active">
+            <!-- Управление файлами -->
+            <div class="file-controls">
+                <div class="import-section">
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                    <button id="importBtn" class="btn primary">📥 Импорт Excel/CSV</button>
+                    <span id="importStatus"></span>
+                </div>
+                <div class="export-section">
+                    <button id="exportExcel" class="btn success">📤 Экспорт Excel</button>
+                    <button id="exportCsv" class="btn outline">📄 Экспорт CSV</button>
+                </div>
+            </div>
+
+            <!-- Управление товарами -->
+            <div class="product-controls">
+                <button id="addProduct" class="btn primary">➕ Добавить товар</button>
+                <input type="text" id="searchProducts" placeholder="🔍 Поиск товаров..." class="search-input">
+                <div class="bulk-actions">
+                    <button id="selectAll" class="btn outline">☑️ Выбрать все</button>
+                    <button id="bulkCompetitorSearch" class="btn secondary" disabled>🔍 Найти цены конкурентов</button>
+                    <button id="bulkAvitoSearch" class="btn secondary" disabled>🛒 Найти б/у на Avito</button>
+                </div>
+            </div>
+
+            <!-- Таблица товаров -->
+            <div class="table-container">
+                <table id="productsTable" class="products-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAllCheckbox"></th>
+                            <th>Название товара</th>
+                            <th>Краткое описание</th>
+                            <th>Количество</th>
+                            <th>Цена закупа</th>
+                            <th>Цена продажи</th>
+                            <th>Цена конкурентов NEW</th>
+                            <th>Цена конкурентов б/у</th>
+                            <th>Последнее обновление</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody">
+                        <!-- Товары будут добавляться динамически -->
+                    </tbody>
+                </table>
+                
+                <div id="emptyState" class="empty-state">
+                    <div class="empty-icon">📦</div>
+                    <h3>Нет товаров для анализа</h3>
+                    <p>Импортируйте Excel/CSV файл или добавьте товары вручную</p>
+                    <button id="addFirstProduct" class="btn primary">➕ Добавить первый товар</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Вкладка: AI Диалог -->
+        <div id="dialog" class="tab-content">
+            <div class="dialog-container">
+                <div class="dialog-header">
+                    <h3>🤖 AI Агент для анализа цен</h3>
+                    <div class="voice-status" id="voiceStatus">Голосовые команды отключены</div>
+                </div>
+
+                <div class="dialog-messages" id="dialogMessages">
+                    <div class="message system">
+                        <div class="message-content">
+                            <strong>Система готова к работе!</strong><br>
+                            Доступные команды:
+                            <ul>
+                                <li>"найди цену на [товар] у конкурентов"</li>
+                                <li>"найди б/у цену на [товар]"</li>
+                                <li>"измени количество [товар] на [число]"</li>
+                                <li>"установи цену продажи [товар] [цена]"</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dialog-input">
+                    <div class="input-container">
+                        <textarea id="userInput" placeholder="Введите команду для AI агента..." rows="3"></textarea>
+                        <div class="input-actions">
+                            <button id="voiceInput" class="btn voice">🎤</button>
+                            <button id="sendMessage" class="btn primary">Отправить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Вкладка: История поиска -->
+        <div id="history" class="tab-content">
+            <div class="history-container">
+                <div class="history-header">
+                    <h3>📋 История поиска цен</h3>
+                    <div class="history-controls">
+                        <select id="historyFilter">
+                            <option value="all">Все поиски</option>
+                            <option value="competitor">Цены конкурентов</option>
+                            <option value="avito">Avito б/у</option>
+                        </select>
+                        <button id="clearHistory" class="btn outline">🗑️ Очистить</button>
+                        <button id="exportHistory" class="btn outline">📤 Экспорт</button>
+                    </div>
+                </div>
+                <div id="historyList" class="history-list">
+                    <!-- История будет загружаться динамически -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Вкладка: Настройки -->
+        <div id="settings" class="tab-content">
+            <div class="settings-container">
+                <h3>⚙️ Настройки системы</h3>
+                
+                <!-- API настройки -->
+                <div class="settings-group">
+                    <h4>🔑 OpenAI API</h4>
+                    <div class="form-group">
+                        <label for="apiKey">API Ключ *</label>
+                        <input type="password" id="apiKey" placeholder="sk-proj-..." required>
+                        <small>Получите ключ на <a href="https://platform.openai.com" target="_blank">platform.openai.com</a></small>
+                    </div>
+                    <div class="form-group">
+                        <label for="gptModel">Модель GPT</label>
+                        <select id="gptModel">
+                            <option value="gpt-4o">GPT-4o (рекомендуется)</option>
+                            <option value="gpt-4o-mini">GPT-4o Mini (экономичная)</option>
+                            <option value="gpt-4">GPT-4</option>
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button id="testConnection" class="btn outline">🧪 Тест подключения</button>
+                        <button id="saveApiSettings" class="btn primary">💾 Сохранить</button>
+                    </div>
+                </div>
+
+                <!-- Настройка промптов -->
+                <div class="settings-group">
+                    <h4>📝 Настройка промптов</h4>
+                    
+                    <div class="form-group">
+                        <label for="competitorPrompt">Промпт для поиска цен конкурентов</label>
+                        <textarea id="competitorPrompt" rows="4" placeholder="Промпт для поиска цен у конкурентов..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="avitoPrompt">Промпт для поиска на Avito</label>
+                        <textarea id="avitoPrompt" rows="4" placeholder="Промпт для поиска б/у товаров на Avito..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editPrompt">Промпт для редактирования данных</label>
+                        <textarea id="editPrompt" rows="4" placeholder="Промпт для редактирования товаров..."></textarea>
+                    </div>
+                    
+                    <button id="resetPrompts" class="btn outline">🔄 Сбросить к умолчанию</button>
+                    <button id="savePrompts" class="btn primary">💾 Сохранить промпты</button>
+                </div>
+
+                <!-- Управление колонками таблицы -->
+                <div class="settings-group">
+                    <h4>📊 Управление колонками таблицы</h4>
+                    <div id="columnsList" class="columns-list">
+                        <!-- Список колонок будет загружаться динамически -->
+                    </div>
+                    <button id="addColumn" class="btn outline">➕ Добавить колонку</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Вкладка: Логи -->
+        <div id="logs" class="tab-content">
+            <div class="logs-container">
+                <div class="logs-header">
+                    <h3>🔍 Системные логи</h3>
+                    <div class="logs-controls">
+                        <select id="logLevel">
+                            <option value="all">Все уровни</option>
+                            <option value="info">Информация</option>
+                            <option value="success">Успех</option>
+                            <option value="warning">Предупреждения</option>
+                            <option value="error">Ошибки</option>
+                        </select>
+                        <button id="clearLogs" class="btn outline">🗑️ Очистить</button>
+                        <button id="exportLogs" class="btn outline">📤 Экспорт</button>
+                    </div>
+                </div>
+                <div id="logsList" class="logs-list">
+                    <!-- Логи будут загружаться динамически -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальные окна -->
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Добавить товар</h3>
+            <form id="productForm">
+                <div class="form-group">
+                    <label for="productName">Название товара *</label>
+                    <input type="text" id="productName" required>
+                </div>
+                <div class="form-group">
+                    <label for="productDescription">Краткое описание</label>
+                    <textarea id="productDescription" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="productQuantity">Количество</label>
+                        <input type="number" id="productQuantity" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="productPurchasePrice">Цена закупа</label>
+                        <input type="number" id="productPurchasePrice" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="productSalePrice">Цена продажи</label>
+                        <input type="number" id="productSalePrice" step="0.01" min="0">
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn primary">Сохранить</button>
+                    <button type="button" id="cancelProduct" class="btn outline">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="columnModal" class="modal">
+        <div class="modal-content">
+            <h3>Добавить колонку</h3>
+            <form id="columnForm">
+                <div class="form-group">
+                    <label for="columnName">Название колонки *</label>
+                    <input type="text" id="columnName" required>
+                </div>
+                <div class="form-group">
+                    <label for="columnType">Тип данных</label>
+                    <select id="columnType">
+                        <option value="text">Текст</option>
+                        <option value="number">Число</option>
+                        <option value="currency">Валюта</option>
+                        <option value="date">Дата</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="columnEditable" checked>
+                        Редактируемая пользователем
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn primary">Добавить</button>
+                    <button type="button" id="cancelColumn" class="btn outline">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Индикатор загрузки -->
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <div class="loading-text">Обработка запроса...</div>
+    </div>
+
+    <!-- Уведомления -->
+    <div id="notifications" class="notifications"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
