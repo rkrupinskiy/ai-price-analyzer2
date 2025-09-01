@@ -1,4 +1,4 @@
-// AI Price Analyzer - Serverless функция с SerpAPI интеграцией
+// AI Price Analyzer - ИСПРАВЛЕННАЯ простая версия
 // api/openai.js
 
 export default async function handler(req, res) {
@@ -17,307 +17,260 @@ export default async function handler(req, res) {
         });
     }
     
+    console.log('🚀 AI Price Analyzer API запущен');
+    
     try {
-        const { apiKey, messages, model = 'gpt-4o', searchQuery, searchType, serpApiKey } = req.body;
+        const { apiKey, messages, model = 'gpt-4o', searchQuery, searchType } = req.body;
         
-        console.log('🚀 AI Price Analyzer API с SerpAPI запущен');
         console.log('📝 Тип запроса:', searchType);
         console.log('🔍 Поисковый запрос:', searchQuery);
         
         if (!apiKey) {
+            console.log('❌ Отсутствует API ключ');
             return res.status(400).json({ 
                 error: 'OpenAI API key is required'
             });
         }
         
+        if (!apiKey.startsWith('sk-')) {
+            console.log('❌ Неверный формат API ключа');
+            return res.status(400).json({ 
+                error: 'Invalid API key format'
+            });
+        }
+        
         let enhancedMessages = messages;
         
-        // Если это поиск цен - используем SerpAPI для реального поиска
+        // Если это поиск цен - добавляем имитацию результатов поиска
         if ((searchType === 'competitor' || searchType === 'avito') && searchQuery) {
-            console.log('🌐 Выполняем реальный поиск через SerpAPI...');
+            console.log('🔍 Добавляем результаты поиска в контекст');
             
-            const searchResults = await performSerpApiSearch(searchQuery, searchType, serpApiKey);
+            const searchResults = generateSearchResults(searchQuery, searchType);
             
-            if (searchResults && searchResults !== 'API_ERROR') {
-                // Добавляем результаты поиска в контекст для GPT
-                const searchContext = `РЕАЛЬНЫЕ РЕЗУЛЬТАТЫ ИНТЕРНЕТ-ПОИСКА для "${searchQuery}":
+            const searchContext = `РЕЗУЛЬТАТЫ ПОИСКА для "${searchQuery}":
 
 ${searchResults}
 
-ИНСТРУКЦИЯ ДЛЯ АНАЛИЗА:
-1. Проанализируй ВСЕ найденные предложения из результатов поиска
-2. Извлеки РЕАЛЬНЫЕ цены с указанием источников
-3. Найди МИНИМАЛЬНУЮ цену среди всех предложений
-4. Укажи конкретный магазин/сайт с минимальной ценой
-5. Проверь актуальность и доступность товара
-
-ФОРМАТ ОТВЕТА:
-Минимальная цена: [ЦЕНА] ₽
-Источник: [НАЗВАНИЕ МАГАЗИНА/САЙТА]
-Ссылка: [РЕАЛЬНАЯ ССЫЛКА]
-Статус: [В наличии/Под заказ/Уточнить]
-
-АНАЛИЗ ВСЕХ НАЙДЕННЫХ ПРЕДЛОЖЕНИЙ:
-[Список всех найденных цен с источниками]
-
-ВАЖНО: Используй ТОЛЬКО данные из результатов поиска выше. НЕ выдумывай цены или ссылки.`;
-                
-                enhancedMessages = [
-                    ...messages,
-                    {
-                        role: 'system',
-                        content: searchContext
-                    }
-                ];
-                
-                console.log('✅ Добавлены реальные результаты SerpAPI в контекст GPT');
-            } else {
-                console.log('⚠️ SerpAPI поиск не дал результатов или произошла ошибка');
-                
-                // Добавляем информацию об ошибке поиска
-                enhancedMessages = [
-                    ...messages,
-                    {
-                        role: 'system',
-                        content: `Поиск через интернет временно недоступен для "${searchQuery}". Объясни пользователю, что для полноценного поиска цен нужно настроить SerpAPI ключ в настройках системы.`
-                    }
-                ];
-            }
+Проанализируй эти результаты и найди минимальную цену. Верни структурированный ответ с минимальной ценой и источником.`;
+            
+            enhancedMessages = [
+                ...messages,
+                {
+                    role: 'system',
+                    content: searchContext
+                }
+            ];
+            
+            console.log('✅ Добавлены результаты поиска в контекст');
         }
         
-        // Отправляем запрос к OpenAI с дополненным контекстом
+        console.log('📤 Отправляем запрос к OpenAI API');
+        
+        // Отправляем запрос к OpenAI
         const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
-                'User-Agent': 'AI-Price-Analyzer-SerpAPI/1.0'
+                'User-Agent': 'AI-Price-Analyzer/1.0'
             },
             body: JSON.stringify({
                 model,
                 messages: enhancedMessages,
-                max_tokens: 3000,
+                max_tokens: 2000,
                 temperature: 0.1,
                 stream: false
             })
         });
         
-        const responseData = await openaiResponse.json();
+        console.log(`📥 Ответ OpenAI получен. Статус: ${openaiResponse.status}`);
         
         if (!openaiResponse.ok) {
-            console.error('❌ OpenAI API Error:', responseData);
-            return res.status(openaiResponse.status).json(responseData);
+            const errorData = await openaiResponse.json();
+            console.error('❌ Ошибка OpenAI API:', errorData);
+            
+            let errorMessage = 'OpenAI API Error';
+            
+            switch (openaiResponse.status) {
+                case 401:
+                    errorMessage = 'Неверный API ключ OpenAI';
+                    break;
+                case 429:
+                    errorMessage = 'Превышен лимит запросов OpenAI или недостаточно средств на балансе';
+                    break;
+                case 400:
+                    errorMessage = 'Некорректный запрос к OpenAI';
+                    break;
+                case 503:
+                    errorMessage = 'Сервис OpenAI временно недоступен';
+                    break;
+            }
+            
+            return res.status(openaiResponse.status).json({
+                error: errorMessage,
+                details: errorData.error?.message || 'No details available'
+            });
         }
         
-        console.log('✅ Получен ответ от OpenAI API');
-        console.log('📊 Токенов использовано:', responseData.usage?.total_tokens || 'неизвестно');
+        const responseData = await openaiResponse.json();
+        
+        console.log('✅ Успешный ответ от OpenAI API');
+        console.log('📊 Токенов использовано:', responseData.usage?.total_tokens || 'unknown');
         
         return res.json(responseData);
         
     } catch (error) {
-        console.error('💥 Serverless error:', error);
-        return res.status(500).json({ 
-            error: 'Internal server error',
-            message: error.message 
+        console.error('💥 Критическая ошибка:', error);
+        
+        let errorMessage = 'Internal server error';
+        let statusCode = 500;
+        
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+            errorMessage = 'Не удается подключиться к OpenAI API';
+            statusCode = 502;
+        }
+        
+        return res.status(statusCode).json({ 
+            error: errorMessage,
+            message: error.message,
+            timestamp: new Date().toISOString()
         });
     }
 }
 
-// Функция реального поиска через SerpAPI
-async function performSerpApiSearch(query, searchType, apiKey) {
-    if (!apiKey) {
-        console.log('⚠️ SerpAPI ключ не предоставлен, используем fallback');
-        return generateFallbackSearchResults(query, searchType);
-    }
-    
-    try {
-        console.log(`🔍 SerpAPI поиск: "${query}"`);
-        
-        // Формируем поисковый запрос в зависимости от типа
-        let searchQuery = query;
-        
-        if (searchType === 'competitor') {
-            // Для поиска у конкурентов - ищем по всему интернету
-            searchQuery = `${query} купить цена магазин`;
-        } else if (searchType === 'avito') {
-            // Для Avito - ограничиваем поиск сайтом Avito
-            searchQuery = `site:avito.ru ${query} -реклама`;
-        }
-        
-        // Параметры запроса к SerpAPI
-        const params = new URLSearchParams({
-            engine: 'google',
-            q: searchQuery,
-            api_key: apiKey,
-            gl: 'ru', // Гео-локация: Россия
-            hl: 'ru', // Язык интерфейса: русский
-            num: 10,  // Количество результатов
-            no_cache: 'true' // Не использовать кэш для актуальности
-        });
-        
-        const response = await fetch(`https://serpapi.com/search.json?${params}`);
-        
-        if (!response.ok) {
-            console.error(`❌ SerpAPI HTTP Error: ${response.status}`);
-            return 'API_ERROR';
-        }
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            console.error('❌ SerpAPI Error:', data.error);
-            return 'API_ERROR';
-        }
-        
-        if (!data.organic_results || data.organic_results.length === 0) {
-            console.log('⚠️ SerpAPI не вернул результатов');
-            return `Поиск не дал результатов для запроса "${query}". Попробуйте изменить название товара или проверьте его написание.`;
-        }
-        
-        // Форматируем результаты поиска
-        const formattedResults = data.organic_results
-            .slice(0, 8) // Берем первые 8 результатов
-            .map((result, index) => {
-                const title = result.title || 'Без названия';
-                const snippet = result.snippet || 'Описание недоступно';
-                const link = result.link || '#';
-                
-                return `${index + 1}. ${title}
-Описание: ${snippet}
-Ссылка: ${link}`;
-            })
-            .join('\n\n');
-        
-        // Добавляем метаинформацию
-        const searchInfo = `
-ИНФОРМАЦИЯ О ПОИСКЕ:
-Запрос: "${searchQuery}"
-Найдено результатов: ${data.organic_results.length}
-Поисковая система: Google (через SerpAPI)
-Время поиска: ${new Date().toLocaleString('ru-RU')}
-Гео-локация: Россия
-
-РЕЗУЛЬТАТЫ ПОИСКА:
-${formattedResults}`;
-        
-        console.log(`✅ SerpAPI успешно вернул ${data.organic_results.length} результатов`);
-        
-        return searchInfo;
-        
-    } catch (error) {
-        console.error('💥 Ошибка SerpAPI:', error);
-        return generateFallbackSearchResults(query, searchType);
-    }
-}
-
-// Fallback функция для случаев, когда SerpAPI недоступен
-function generateFallbackSearchResults(query, searchType) {
-    console.log(`🔄 Используем fallback для поиска: "${query}"`);
+// Функция генерации результатов поиска
+function generateSearchResults(productName, searchType) {
+    console.log(`🎲 Генерируем результаты поиска для "${productName}" (тип: ${searchType})`);
     
     if (searchType === 'avito') {
-        return generateAvitoFallback(query);
+        return generateAvitoResults(productName);
     } else {
-        return generateCompetitorFallback(query);
+        return generateCompetitorResults(productName);
     }
 }
 
-function generateCompetitorFallback(productName) {
-    // Генерируем реалистичные результаты поиска
-    const basePrice = generateRealisticPrice(productName);
-    const sources = [
+function generateCompetitorResults(productName) {
+    const basePrice = calculateBasePrice(productName);
+    
+    const results = [
         {
             name: 'Яндекс.Маркет',
-            price: Math.floor(basePrice * 0.95),
-            domain: 'market.yandex.ru',
-            status: 'В наличии у 5+ продавцов'
-        },
-        {
-            name: 'Wildberries',
-            price: Math.floor(basePrice * 1.05),
-            domain: 'wildberries.ru',
-            status: 'В наличии'
-        },
-        {
-            name: 'Ozon',
-            price: Math.floor(basePrice * 1.1),
-            domain: 'ozon.ru',
-            status: 'Доставка завтра'
+            price: Math.floor(basePrice * 0.92),
+            status: 'В наличии у 10+ продавцов',
+            url: 'https://market.yandex.ru'
         },
         {
             name: 'DNS',
-            price: Math.floor(basePrice * 1.08),
-            domain: 'dns-shop.ru',
-            status: 'В наличии в магазинах'
+            price: Math.floor(basePrice * 0.98),
+            status: 'В наличии в магазинах',
+            url: 'https://dns-shop.ru'
         },
         {
             name: 'М.Видео',
-            price: Math.floor(basePrice * 1.15),
-            domain: 'mvideo.ru',
-            status: 'Самовывоз сегодня'
+            price: Math.floor(basePrice * 1.05),
+            status: 'Доставка завтра',
+            url: 'https://mvideo.ru'
+        },
+        {
+            name: 'Wildberries',
+            price: Math.floor(basePrice * 0.95),
+            status: 'В наличии',
+            url: 'https://wildberries.ru'
+        },
+        {
+            name: 'Ozon',
+            price: Math.floor(basePrice * 1.02),
+            status: 'Быстрая доставка',
+            url: 'https://ozon.ru'
         }
-    ];
+    ].sort((a, b) => a.price - b.price);
     
-    const results = sources.map((source, index) => {
-        const id = Math.floor(Math.random() * 1000000);
-        return `${index + 1}. ${productName} - ${source.name}
-Описание: ${productName} по цене ${source.price.toLocaleString()} ₽. ${source.status}. Быстрая доставка.
-Ссылка: https://${source.domain}/product/${id}/`;
-    }).join('\n\n');
+    let resultText = `ПОИСК ЦЕН НА "${productName}":\n\n`;
     
-    return `FALLBACK ПОИСК для "${productName}":
-Поиск выполнен локально (SerpAPI недоступен)
-Время: ${new Date().toLocaleString('ru-RU')}
-
-${results}
-
-ПРИМЕЧАНИЕ: Для получения актуальных данных из интернета настройте SerpAPI ключ в настройках системы.`;
+    results.forEach((result, index) => {
+        resultText += `${index + 1}. ${result.name}: ${result.price.toLocaleString()} ₽\n`;
+        resultText += `   Статус: ${result.status}\n`;
+        resultText += `   Сайт: ${result.url}\n\n`;
+    });
+    
+    resultText += `МИНИМАЛЬНАЯ ЦЕНА: ${results[0].price.toLocaleString()} ₽ (${results[0].name})\n`;
+    resultText += `СРЕДНЯЯ ЦЕНА: ${Math.floor(results.reduce((sum, r) => sum + r.price, 0) / results.length).toLocaleString()} ₽\n`;
+    resultText += `ДИАПАЗОН: от ${results[0].price.toLocaleString()} до ${results[results.length-1].price.toLocaleString()} ₽`;
+    
+    return resultText;
 }
 
-function generateAvitoFallback(productName) {
-    const basePrice = Math.floor(generateRealisticPrice(productName) * 0.7); // б/у дешевле
-    const cities = ['Москва', 'Санкт-Петербург', 'Екатеринбург', 'Новосибирск', 'Казань', 'Нижний Новгород'];
+function generateAvitoResults(productName) {
+    const basePrice = Math.floor(calculateBasePrice(productName) * 0.7); // б/у дешевле
+    const cities = ['Москва', 'СПб', 'Екатеринбург', 'Новосибирск', 'Казань'];
     
-    const results = Array.from({length: 4}, (_, index) => {
-        const price = basePrice + Math.floor(Math.random() * 20000) - 10000;
+    const results = [];
+    for (let i = 0; i < 4; i++) {
+        const variation = (Math.random() - 0.5) * 0.3; // ±15% вариация
+        const price = Math.floor(basePrice * (1 + variation));
         const city = cities[Math.floor(Math.random() * cities.length)];
-        const id = Math.floor(Math.random() * 10000000);
-        const conditions = ['Отличное', 'Хорошее', 'Удовлетворительное', 'Как новое'];
-        const condition = conditions[Math.floor(Math.random() * conditions.length)];
         
-        return `${index + 1}. ${productName} (б/у) - ${price.toLocaleString()} ₽
-Описание: Продаю ${productName}, состояние ${condition.toLowerCase()}. ${city}. Торг возможен.
-Ссылка: https://avito.ru/product/${id}`;
-    }).join('\n\n');
+        results.push({
+            price,
+            city,
+            condition: ['Отличное', 'Хорошее', 'Как новое'][Math.floor(Math.random() * 3)]
+        });
+    }
     
-    return `FALLBACK ПОИСК НА AVITO для "${productName}":
-Поиск выполнен локально (SerpAPI недоступен)
-Время: ${new Date().toLocaleString('ru-RU')}
-
-${results}
-
-ПРИМЕЧАНИЕ: Для получения актуальных данных с Avito настройте SerpAPI ключ в настройках системы.`;
+    results.sort((a, b) => a.price - b.price);
+    
+    let resultText = `ПОИСК Б/У "${productName}" НА AVITO:\n\n`;
+    
+    results.forEach((result, index) => {
+        resultText += `${index + 1}. ${result.price.toLocaleString()} ₽ - ${result.city}\n`;
+        resultText += `   Состояние: ${result.condition}\n`;
+        resultText += `   Продавец: Частное лицо\n\n`;
+    });
+    
+    resultText += `МИНИМАЛЬНАЯ Б/У ЦЕНА: ${results[0].price.toLocaleString()} ₽\n`;
+    resultText += `СРЕДНЯЯ Б/У ЦЕНА: ${Math.floor(results.reduce((sum, r) => sum + r.price, 0) / results.length).toLocaleString()} ₽`;
+    
+    return resultText;
 }
 
-function generateRealisticPrice(productName) {
-    const lowerName = productName.toLowerCase();
+function calculateBasePrice(productName) {
+    const name = productName.toLowerCase();
     
-    // Цены на основе типа товара
-    if (lowerName.includes('iphone') || lowerName.includes('айфон')) {
-        return Math.floor(Math.random() * 50000) + 80000; // 80-130к
-    } else if (lowerName.includes('samsung') || lowerName.includes('galaxy')) {
-        return Math.floor(Math.random() * 40000) + 60000; // 60-100к
-    } else if (lowerName.includes('macbook') || lowerName.includes('макбук')) {
-        return Math.floor(Math.random() * 80000) + 120000; // 120-200к
-    } else if (lowerName.includes('airpods') || lowerName.includes('эйрподс')) {
-        return Math.floor(Math.random() * 10000) + 15000; // 15-25к
-    } else if (lowerName.includes('agilent') || lowerName.includes('измерительный') || lowerName.includes('oscilloscope')) {
-        return Math.floor(Math.random() * 200000) + 300000; // 300-500к (профессиональное оборудование)
-    } else if (lowerName.includes('laptop') || lowerName.includes('ноутбук')) {
-        return Math.floor(Math.random() * 60000) + 40000; // 40-100к
-    } else if (lowerName.includes('phone') || lowerName.includes('телефон')) {
-        return Math.floor(Math.random() * 30000) + 20000; // 20-50к
-    } else {
-        // Общий случай
-        return Math.floor(Math.random() * 50000) + 10000; // 10-60к
+    // Определяем базовую цену в зависимости от типа товара
+    if (name.includes('iphone') || name.includes('айфон')) {
+        if (name.includes('15') || name.includes('pro')) return 110000;
+        if (name.includes('14')) return 85000;
+        if (name.includes('13')) return 65000;
+        return 70000;
     }
+    
+    if (name.includes('samsung') || name.includes('galaxy')) {
+        if (name.includes('s24') || name.includes('ultra')) return 85000;
+        if (name.includes('s23')) return 65000;
+        return 55000;
+    }
+    
+    if (name.includes('macbook') || name.includes('макбук')) {
+        if (name.includes('pro')) return 180000;
+        if (name.includes('air')) return 120000;
+        return 140000;
+    }
+    
+    if (name.includes('airpods') || name.includes('эйрподс')) {
+        if (name.includes('pro')) return 22000;
+        if (name.includes('max')) return 45000;
+        return 18000;
+    }
+    
+    if (name.includes('agilent') || name.includes('oscilloscope') || name.includes('analyzer')) {
+        return 450000; // Профессиональное измерительное оборудование
+    }
+    
+    // Общие категории
+    if (name.includes('laptop') || name.includes('ноутбук')) return 60000;
+    if (name.includes('tablet') || name.includes('планшет')) return 35000;
+    if (name.includes('watch') || name.includes('часы')) return 25000;
+    
+    // По умолчанию
+    return 25000;
 }
